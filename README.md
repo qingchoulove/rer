@@ -16,3 +16,9 @@ Options:
   -h, --help               Print help
   -V, --version            Print version
 ```
+
+## Example
+
+```shell
+rer --path "/share/Downloads" --regex "Thirteen_Years_of_Dust_2023_S(?P<season>\d{2})E(?P<ep>\d{2})_1080p" --name Thirteen.Years.of.Dust --year 2023
+```
