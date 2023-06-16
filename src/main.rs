@@ -1,7 +1,8 @@
-use std::{fs, path::Path};
+use std::{env, fs, path::Path};
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 
+use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use regex::Regex;
 
@@ -9,13 +10,15 @@ use regex::Regex;
 #[command(author, version, about, long_about = None)]
 struct Config {
     #[arg(long)]
-    path: String,
+    path: Option<String>,
     #[arg(long)]
     regex: String,
     #[arg(long)]
-    name: String,
+    name: Option<String>,
     #[arg(long)]
-    year: u32,
+    year: Option<u32>,
+    #[arg(long)]
+    season: Option<u8>,
     #[arg(long, value_enum)]
     source: Option<Source>,
     #[arg(long, value_enum)]
@@ -24,9 +27,10 @@ struct Config {
     encode: Option<Encode>,
 }
 
-fn main() {
+fn main() -> Result<()> {
+    let current_dir = env::current_dir().unwrap().to_str().unwrap().to_string();
     let cfg = Config::parse();
-    let path = &cfg.path.clone();
+    let path = &cfg.path.clone().unwrap_or(current_dir);
     let rer = Rer::new(cfg);
 
     let path = Path::new(path);
@@ -35,13 +39,14 @@ fn main() {
             let file = entry.path();
             let filename = file.to_str().unwrap();
             let resource = rer.parse(filename);
-            if resource.is_some() {
+            if let Some(r) = resource {
                 let ext = file.extension().unwrap_or(OsStr::new("mp4")).to_str().unwrap();
-                let new_filename = format!("{}.{}", resource.unwrap().to_string(), ext);
+                let new_filename = format!("{}.{}", r.to_string(), ext);
                 fs::rename(filename, new_filename).unwrap();
             }
         }
     }
+    Ok(())
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -121,22 +126,28 @@ impl Rer {
             return None;
         }
         let caps = caps.unwrap();
-        let season = caps.name("season").map_or(1, |m| m.as_str().parse::<u8>().unwrap());
+        if caps.name("ep").is_none() {
+            return None;
+        }
+
+        let default_name = config.name.clone().unwrap_or("".to_string());
+        let default_season = config.season.unwrap_or(1);
+        let default_year = config.year.unwrap_or(2023);
+        let default_source = config.source.unwrap_or(Source::WEB_DL);
+        let default_encode = config.encode.unwrap_or(Encode::H264);
+        let default_clarity = config.clarity.unwrap_or(Clarity::C1080p);
+
+        let season = caps.name("season").map_or(default_season, |m| m.as_str().parse::<u8>().unwrap());
         let ep = caps.name("ep").map_or(1, |m| m.as_str().parse::<u8>().unwrap());
-        let name = &config.name;
-        let year = config.year;
-        let source = config.source.unwrap_or(Source::WEB_DL);
-        let encode = config.encode.unwrap_or(Encode::H264);
-        let clarity = config.clarity.unwrap_or(Clarity::C1080p);
 
         Some(Resource {
-            name: name.to_string(),
-            year,
+            name: default_name,
+            year: default_year,
             season,
             ep,
-            source,
-            encode,
-            clarity,
+            source: default_source,
+            encode: default_encode,
+            clarity: default_clarity,
         })
     }
 }
